@@ -132,6 +132,7 @@ public class ProducerEndPoint {
   @OnClose
   public void onClose(Session session) {
     sessionSet.remove(session);
+    sessionToIp.remove(session);
     System.out.println("Connection closed: " + sessionToIp.get(session));
   }
 
