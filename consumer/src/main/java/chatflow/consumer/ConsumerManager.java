@@ -1,6 +1,7 @@
 package chatflow.consumer;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -28,6 +29,7 @@ public class ConsumerManager implements Runnable {
   private final long monitorInterval;
   private final Set<DeclareOk> queueSet = new HashSet<>();
   private final int prefetchCount;
+  // private final int messengerPoolSize;
 
   public ConsumerManager(
       int consumerPoolSize,
@@ -40,6 +42,9 @@ public class ConsumerManager implements Runnable {
     broadcaster = new Broadcaster(messengerPoolSize);
     this.monitorInterval = monitorInterval;
     this.prefetchCount = prefetchCount;
+    // this.messengerPoolSize = messengerPoolSize;
+
+    pool.init();
   }
 
   public class MessageConsumer extends DefaultConsumer {
@@ -70,9 +75,14 @@ public class ConsumerManager implements Runnable {
       workerPool.submit(
           () -> {
             try {
-              boolean succeed = broadcaster.send("", envelope.getRoutingKey());
+              System.out.println("Received message for routing key: " + envelope.getRoutingKey());
+              boolean succeed =
+                  broadcaster.send(
+                      new String(body, StandardCharsets.UTF_8), envelope.getRoutingKey());
               if (succeed) {
                 this.getChannel().basicAck(envelope.getDeliveryTag(), false);
+              } else {
+                this.getChannel().basicNack(envelope.getDeliveryTag(), false, true);
               }
             } catch (IOException e) {
             }
@@ -81,12 +91,16 @@ public class ConsumerManager implements Runnable {
   }
 
   private void subscribe(String routingKey) throws Exception {
+
     Channel channel = pool.borrowChannel();
+    // System.out.println("Subscribing to " + routingKey);
     MessageConsumer consumer = new MessageConsumer(channel);
     channel.basicQos(prefetchCount);
     channel.exchangeDeclare("chat.exchange", "direct");
+
     DeclareOk queue = channel.queueDeclare(routingKey, true, false, true, null);
     queueSet.add(queue);
+
     channel.queueBind(routingKey, "chat.exchange", routingKey);
     channel.basicConsume(routingKey, false, consumer);
     consumerAssigment.computeIfAbsent(routingKey, k -> new LinkedList<>()).add(consumer);
@@ -98,22 +112,39 @@ public class ConsumerManager implements Runnable {
 
   @Override
   public void run() {
+    for (int i = 1; i < 21; i++) {
+      // System.out.println("Subscribing to room." + i);
+      try {
+        if (pool.isEmpty()) {
+          pool.addXChannel(5);
+        }
+        subscribe("room." + i);
+      } catch (Exception e) {
+        System.err.println("Error subscribing to room." + i + ": " + e.getMessage());
+      }
+    }
     while (running.get()) {
       try {
         for (DeclareOk queue : queueSet) {
+          
           if (queue.getMessageCount() > 1000) {
             if (pool.isEmpty()) {
               pool.addXChannel(5);
             }
+            System.out.println(queue.getQueue() + " has " + queue.getMessageCount() + "messages.");
+            System.out.println("Adding one more consumer to " + queue.getQueue());
             subscribe(queue.getQueue());
           } else if (queue.getMessageCount() < 500
               && consumerAssigment.get(queue.getQueue()).size() > 1) {
             MessageConsumer consumer = consumerAssigment.get(queue.getQueue()).poll();
             consumer.getChannel().basicCancel(consumer.getConsumerTag());
+            System.out.println(queue.getQueue() + " has " + queue.getMessageCount() + "messages.");
+            System.out.println("Removing one consumer from " + queue.getQueue());
           }
         }
         Thread.sleep(monitorInterval);
       } catch (Exception e) {
+        System.err.println("Error in ConsumerManager: " + e.getMessage());
       }
     }
   }

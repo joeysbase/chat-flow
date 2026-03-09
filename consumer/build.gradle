@@ -43,7 +43,25 @@ java {
     }
 }
 
+jar {
+    archiveClassifier = "all"
+
+    manifest {
+        attributes(
+            "Main-Class": application.mainClass
+        )
+    }
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from {
+        configurations.runtimeClasspath.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+}
+
 application {
     // Define the main class for the application.
-    // mainClass = 'org.example.App'
+    mainClass = 'chatflow.consumer.ServerApp'
 }

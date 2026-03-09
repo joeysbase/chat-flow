@@ -8,18 +8,21 @@ import jakarta.websocket.Session;
 import jakarta.websocket.server.PathParam;
 import jakarta.websocket.server.ServerEndpoint;
 
-@ServerEndpoint("/receive-message/room/{roomId}")
+@ServerEndpoint("/receive/room/{roomId}")
 public class ReceiveEndPoint {
-
   @OnOpen
   public void onOpen(Session session, @PathParam("roomId") String roomId) {
+    // System.out.println("Session opened, roomId: " + roomId);
     RoomManager.addSessionToRoom(roomId, session);
     session.getUserProperties().put("roomId", roomId);
   }
 
   @OnMessage
   public void onMessage(String message, Session session) {
-    // Handle incoming messages if needed
+    // System.out.println("Received from client: " + message);
+    // if(message.equals("ACK")){
+    //   RoomManager.getLatch(session).countDown();
+    // }
   }
 
   @OnClose

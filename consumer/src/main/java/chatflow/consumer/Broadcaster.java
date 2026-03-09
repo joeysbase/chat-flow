@@ -1,5 +1,6 @@
 package chatflow.consumer;
 
+import java.io.IOException;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -8,7 +9,7 @@ import java.util.concurrent.TimeUnit;
 
 import jakarta.websocket.Session;
 
-public class Broadcaster{
+public class Broadcaster {
   private final ExecutorService messengerPool;
 
   private class Messenger implements Runnable {
@@ -31,32 +32,34 @@ public class Broadcaster{
       }
     }
 
-    private void sendWithRetry(String message, int maxRetries, Session session) {
+    private boolean sendWithRetry(String message, int maxRetries, Session session) {
       int attempt = 0;
       while (attempt < maxRetries) {
         try {
           if (session.isOpen()) {
             session.getBasicRemote().sendText(message);
-            IdempotencyCache.add(message, session);
           }
-          return;
-        } catch (Exception e) {
+          return true;
+        } catch (IOException e) {
           attempt++;
           if (attempt >= maxRetries) {
             // Do nothing for now
-            return;
           }
           backoff(attempt);
         }
       }
+      return false;
     }
 
     @Override
     public void run() {
       if (!IdempotencyCache.isMessageSent(message, session)) {
-        sendWithRetry(message, 5, session);
+        boolean succeed = sendWithRetry(message, 5, session);
+        if (succeed) {
+          IdempotencyCache.add(message, session);
+        }
       }
-      latch.countDown();
+      this.latch.countDown();
     }
   }
 
@@ -65,24 +68,26 @@ public class Broadcaster{
   }
 
   private boolean isAllSent(String message, Set<Session> sessionSet) {
-      for (Session session : sessionSet) {
-        if (!IdempotencyCache.isMessageSent(message, session)) {
-          return false;
-        }
+    for (Session session : sessionSet) {
+      if (!IdempotencyCache.isMessageSent(message, session)) {
+        return false;
       }
-      return true;
     }
+    return true;
+  }
 
-  public boolean send(String message, String routingKey){
-    String roomId = routingKey.split(".")[-1];
+  public boolean send(String message, String routingKey) {
+    String roomId = routingKey.substring(routingKey.lastIndexOf(".") + 1);
+    System.out.println("Broadcasting message to room: " + roomId);
     Set<Session> sessionSet = RoomManager.getSessionsByRoomId(roomId);
     if (!sessionSet.isEmpty()) {
       CountDownLatch latch = new CountDownLatch(sessionSet.size());
       for (Session session : sessionSet) {
         messengerPool.submit(new Messenger(message, session, latch));
       }
+      
       try {
-        latch.await(10,TimeUnit.MINUTES);
+        latch.await(1, TimeUnit.MINUTES);
       } catch (InterruptedException e) {
         // Handle interruption if necessary
       }

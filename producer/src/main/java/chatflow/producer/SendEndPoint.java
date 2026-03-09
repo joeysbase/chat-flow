@@ -6,13 +6,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeoutException;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.rabbitmq.client.Channel;
 
-import chatflow.utils.ChannelPool;
 import chatflow.utils.ChatMessage;
 import chatflow.utils.IpAwareConfigurator;
 import chatflow.utils.MessageValidator;
@@ -25,19 +24,25 @@ import jakarta.websocket.OnOpen;
 import jakarta.websocket.Session;
 import jakarta.websocket.server.ServerEndpoint;
 
-@ServerEndpoint(value = "/send-message", configurator = IpAwareConfigurator.class)
+@ServerEndpoint(value = "/send", configurator = IpAwareConfigurator.class)
 public class SendEndPoint {
 
   public static Set<Session> sessionSet = ConcurrentHashMap.newKeySet();
   public static Map<Session, String> sessionToIp = new ConcurrentHashMap<>();
   private static final ObjectMapper MAPPER = new ObjectMapper();
-  private static final ChannelPool POOL = new ChannelPool("", 20);
-  private final String serverId;
+  // private static final ChannelPool POOL = new ChannelPool("localhost", 20);
+  private String serverId="1";
   private static final String EXCHANGE_NAME = "chat.exchange";
+  // {
+  //   POOL.init();
+  // }
 
   public SendEndPoint(String id) {
     serverId = id;
   }
+
+  public SendEndPoint() {
+}
 
   private void sendError(String msg, Session session) {
     ObjectNode node = MAPPER.createObjectNode();
@@ -56,17 +61,13 @@ public class SendEndPoint {
     queueMsg.userId = chatMsg.userId;
     queueMsg.username = chatMsg.username;
     queueMsg.timestamp = chatMsg.timestamp;
-    queueMsg.clientIp = sessionToIp.get(session);
+    queueMsg.clientIp = "null";
     queueMsg.serverId = this.serverId;
     return queueMsg;
   }
 
   private void sendAck(Session session){
-    ObjectNode node = MAPPER.createObjectNode();
-    node.put("status", "succeed");
-    node.put("msg", "message received");
-    node.put("timestamp", Instant.now().toString());
-    session.getAsyncRemote().sendText(node.toString());
+    session.getAsyncRemote().sendText("ACK");
   }
 
   private void backoff(int attempt) {
@@ -85,8 +86,8 @@ public class SendEndPoint {
         channel.basicPublish(EXCHANGE_NAME, routingKey, null, messageBody);
         channel.waitForConfirmsOrDie(5000);
         sendAck(session);
-        return; // Success
-      } catch (Exception e) {
+        return; 
+      } catch (IOException | InterruptedException | TimeoutException e) {
         attempt++;
         if (attempt >= maxRetries) {
           sendError("Failed to publish message after " + maxRetries + " attempts", session);
@@ -100,12 +101,13 @@ public class SendEndPoint {
   @OnOpen
   public void onOpen(Session session, EndpointConfig config) {
     sessionSet.add(session);
-    sessionToIp.put(session, (String) config.getUserProperties().get("client-ip"));
+    // sessionToIp.put(session, (String) config.getUserProperties().get("client-ip"));
     System.out.println("log: new user connected.");
   }
 
   @OnMessage
   public void onMessage(String message, Session session) {
+    System.out.println("Received: " + message);
     try {
       // Validate message
       ChatMessage chatMsg = MAPPER.readValue(message, ChatMessage.class);
@@ -116,27 +118,29 @@ public class SendEndPoint {
       }
 
       // Publish to queue
-      Channel channel = POOL.borrowChannel();
+      Channel channel = ConnectionManager.POOL.borrowChannel();
       QueueMessage queueMsg = buildQueueMessage(chatMsg, session);
       channel.queueDeclare("room." + queueMsg.roomId, true, false, true, null);
       channel.exchangeDeclare("chat.exchange", "direct");
       channel.queueBind("room." + queueMsg.roomId, EXCHANGE_NAME, "room." + queueMsg.roomId);
       publishWithRetry(channel, "room." + queueMsg.roomId, MAPPER.writeValueAsBytes(queueMsg), 5, session);
-      POOL.returnChannel(channel);
-    } catch (JsonProcessingException e) {
-      sendError("Invalid message format", session);
+      ConnectionManager.POOL.returnChannel(channel);
+      System.out.println("log: message published to room" + queueMsg.roomId +"successfully.");
     } catch (InterruptedException | IOException e) {
-
+      sendError(e.toString(), session);
     }
   }
 
   @OnClose
   public void onClose(Session session) {
+    System.out.println("Connection closed: " + sessionToIp.get(session));
     sessionSet.remove(session);
     sessionToIp.remove(session);
-    System.out.println("Connection closed: " + sessionToIp.get(session));
+    
   }
 
   @OnError
-  public void onError(Session session, Throwable throwable) {}
+  public void onError(Session session, Throwable throwable) {
+    System.err.println(throwable.getMessage());
+  }
 }
