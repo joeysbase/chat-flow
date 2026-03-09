@@ -53,11 +53,9 @@ public class Broadcaster {
 
     @Override
     public void run() {
-      if (!IdempotencyCache.isMessageSent(message, session)) {
-        boolean succeed = sendWithRetry(message, 5, session);
-        if (succeed) {
-          IdempotencyCache.add(message, session);
-        }
+      boolean succeed = sendWithRetry(message, 5, session);
+      if (succeed) {
+        IdempotencyCache.add(message, session);
       }
       this.latch.countDown();
     }
@@ -83,9 +81,11 @@ public class Broadcaster {
     if (!sessionSet.isEmpty()) {
       CountDownLatch latch = new CountDownLatch(sessionSet.size());
       for (Session session : sessionSet) {
-        messengerPool.submit(new Messenger(message, session, latch));
+        if (!IdempotencyCache.isMessageSent(message, session)) {
+          messengerPool.submit(new Messenger(message, session, latch));
+        }
       }
-      
+
       try {
         latch.await(1, TimeUnit.MINUTES);
       } catch (InterruptedException e) {
