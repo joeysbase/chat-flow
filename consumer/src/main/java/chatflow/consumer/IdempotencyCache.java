@@ -30,4 +30,8 @@ public class IdempotencyCache {
         }
         return cache.get(idempotencyKey).contains(session);
     }
+
+    public static int size(){
+        return cache.size();
+    }
 }

@@ -11,6 +11,11 @@ import jakarta.websocket.server.ServerContainer;
 
 public class ServerApp {
     public static void main(String[] args) throws Exception {
+        if(args.length != 1) {
+            System.err.println("Usage: java ServerApp <MQHost>");
+            System.exit(1);
+        }
+        ConnectionManager.init(args[0]);
         Tomcat tomcat = new Tomcat();
         tomcat.setPort(8080);
         tomcat.getConnector();

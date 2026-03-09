@@ -37,7 +37,11 @@ public class Broadcaster {
       while (attempt < maxRetries) {
         try {
           if (session.isOpen()) {
+            // System.out.println("Sending message to session " + session.getId() + ": ");
             session.getBasicRemote().sendText(message);
+            Thread.sleep(100);
+          } else {
+            System.out.println("Connection not open");
           }
           return true;
         } catch (IOException e) {
@@ -46,10 +50,19 @@ public class Broadcaster {
             // Do nothing for now
           }
           backoff(attempt);
+        } catch (InterruptedException e) {
+
         }
       }
       return false;
     }
+
+    // public void send(){
+    //   boolean succeed = sendWithRetry(message, 5, session);
+    //   if (succeed) {
+    //     IdempotencyCache.add(message, session);
+    //   }
+    // }
 
     @Override
     public void run() {
@@ -76,12 +89,14 @@ public class Broadcaster {
 
   public boolean send(String message, String routingKey) {
     String roomId = routingKey.substring(routingKey.lastIndexOf(".") + 1);
-    System.out.println("Broadcasting message to room: " + roomId);
+    // System.out.println("Broadcasting message to room: " + roomId);
     Set<Session> sessionSet = RoomManager.getSessionsByRoomId(roomId);
     if (!sessionSet.isEmpty()) {
       CountDownLatch latch = new CountDownLatch(sessionSet.size());
       for (Session session : sessionSet) {
         if (!IdempotencyCache.isMessageSent(message, session)) {
+          // Messenger m=new Messenger(message, session, latch);
+          // m.send();
           messengerPool.submit(new Messenger(message, session, latch));
         }
       }

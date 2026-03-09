@@ -2,16 +2,12 @@ package chatflow.client;
 
 import java.io.IOException;
 import java.net.URI;
-import java.util.HashMap;
-import java.util.Map;
 
 import jakarta.websocket.ContainerProvider;
 import jakarta.websocket.DeploymentException;
 import jakarta.websocket.WebSocketContainer;
 
 public class ClientThread implements Runnable {
-    private ClientSendEndPoint sendConnection = null;
-    private final Map<String, ClientReceiveEndPoint> receiveConnections = new HashMap<>();
     private final String sendServerIp;
     private final String receiveServerIp;
 
@@ -25,7 +21,7 @@ public class ClientThread implements Runnable {
             WebSocketContainer container = ContainerProvider.getWebSocketContainer();
             ClientSendEndPoint client = new ClientSendEndPoint();
             container.connectToServer(client, URI.create("ws://"+sendServerIp+":8080/send"));
-            sendConnection = client;
+            ConnectionManager.sendConnection = client;
         } catch (DeploymentException | IOException e) {
         }
     }
@@ -35,7 +31,7 @@ public class ClientThread implements Runnable {
             WebSocketContainer container = ContainerProvider.getWebSocketContainer();
             ClientReceiveEndPoint client = new ClientReceiveEndPoint();
             container.connectToServer(client, URI.create("ws://"+receiveServerIp+":9090/receive/room/" + roomId));
-            receiveConnections.put(roomId, client);
+            ConnectionManager.receiveConnections.put(roomId, client);
         } catch (DeploymentException | IOException e) {
 
         }
@@ -53,23 +49,23 @@ public class ClientThread implements Runnable {
         int attempt = 0;
         while (attempt < maxRetries) {
             try {
-                if(sendConnection==null||!sendConnection.isOpen()){
-                    if(sendConnection==null){
+                if(ConnectionManager.sendConnection==null||!ConnectionManager.sendConnection.isOpen()){
+                    if(ConnectionManager.sendConnection==null){
                         Statistics.sendConnection.incrementAndGet();
                     }else{
                         Statistics.sendReconnection.incrementAndGet();
                     }
                     connectToSendServer();
                 }
-                if(!receiveConnections.containsKey(chatTask.roomId)||!receiveConnections.get(chatTask.roomId).isOpen()){
-                    if(!receiveConnections.containsKey(chatTask.roomId)){
+                if(!ConnectionManager.receiveConnections.containsKey(chatTask.roomId)||!ConnectionManager.receiveConnections.get(chatTask.roomId).isOpen()){
+                    if(!ConnectionManager.receiveConnections.containsKey(chatTask.roomId)){
                         Statistics.receiveConnection.incrementAndGet();
                     }else{
                         Statistics.receiveReconnection.incrementAndGet();
                     }
                     connectToReceiveServer(chatTask.roomId);
                 }
-                boolean succeed=sendConnection.sendMessage(chatTask.json);
+                boolean succeed=ConnectionManager.sendConnection.sendMessage(chatTask.json);
                 if(succeed){
                     return true;
                 }else{
@@ -81,13 +77,6 @@ public class ClientThread implements Runnable {
             }
         }
         return false;
-    }
-
-    public void cleanup(){
-        sendConnection.close();
-        for(ClientReceiveEndPoint conn:receiveConnections.values()){
-            conn.close();
-        }
     }
 
     @Override
@@ -104,7 +93,6 @@ public class ClientThread implements Runnable {
                 Statistics.failedMessage.incrementAndGet();
             }
         }
-        // cleanup();
     }
 
 }

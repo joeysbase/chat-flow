@@ -107,7 +107,7 @@ public class SendEndPoint {
 
   @OnMessage
   public void onMessage(String message, Session session) {
-    System.out.println("Received: " + message);
+    // System.out.println("Received: " + message);
     try {
       // Validate message
       ChatMessage chatMsg = MAPPER.readValue(message, ChatMessage.class);

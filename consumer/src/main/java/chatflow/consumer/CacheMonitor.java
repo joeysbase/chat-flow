@@ -16,14 +16,18 @@ public class CacheMonitor implements Runnable {
     @Override
     public void run(){
         while(running.get()){
+            // System.out.println("CacheMonitor: Checking cache for expired entries...");
+            // System.out.println("Current cache size: " + IdempotencyCache.size());
             Instant currentTimestamp=Instant.now();
             for(String key:IdempotencyCache.createdTime.keySet()){
                 Instant timeCreated=IdempotencyCache.createdTime.get(key);
                 long timeElapsed=currentTimestamp.minusMillis(timeCreated.toEpochMilli()).toEpochMilli();
                 if(timeElapsed>=timeToLive){
                     IdempotencyCache.remove(key);
-                }else{
+                }else if(timeElapsed>0){
                     timeToWait=Math.min(timeToWait,timeElapsed);
+                }else{
+                    timeToWait=timeToLive;
                 }
             }
             try {

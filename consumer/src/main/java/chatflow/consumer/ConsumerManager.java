@@ -27,18 +27,20 @@ public class ConsumerManager implements Runnable {
   private final Map<String, Queue<MessageConsumer>> consumerAssigment = new HashMap<>();
   private final AtomicBoolean running = new AtomicBoolean(true);
   private final long monitorInterval;
-  private final Set<DeclareOk> queueSet = new HashSet<>();
+  private final Set<String> queueSet = new HashSet<>();
   private final int prefetchCount;
+
   // private final int messengerPoolSize;
 
   public ConsumerManager(
+      String MQHost,
       int consumerPoolSize,
       int messengerPoolSize,
       int workerPoolSize,
       long monitorInterval,
       int prefetchCount) {
     workerPool = Executors.newFixedThreadPool(workerPoolSize);
-    pool = new ChannelPool("", consumerPoolSize);
+    pool = new ChannelPool(MQHost, consumerPoolSize);
     broadcaster = new Broadcaster(messengerPoolSize);
     this.monitorInterval = monitorInterval;
     this.prefetchCount = prefetchCount;
@@ -75,7 +77,8 @@ public class ConsumerManager implements Runnable {
       workerPool.submit(
           () -> {
             try {
-              System.out.println("Received message for routing key: " + envelope.getRoutingKey());
+              // System.out.println("Received message for routing key: " +
+              // envelope.getRoutingKey());
               boolean succeed =
                   broadcaster.send(
                       new String(body, StandardCharsets.UTF_8), envelope.getRoutingKey());
@@ -97,9 +100,8 @@ public class ConsumerManager implements Runnable {
     MessageConsumer consumer = new MessageConsumer(channel);
     channel.basicQos(prefetchCount);
     channel.exchangeDeclare("chat.exchange", "direct");
-
-    DeclareOk queue = channel.queueDeclare(routingKey, true, false, true, null);
-    queueSet.add(queue);
+    channel.queueDeclare(routingKey, true, false, true, null);
+    queueSet.add(routingKey);
 
     channel.queueBind(routingKey, "chat.exchange", routingKey);
     channel.basicConsume(routingKey, false, consumer);
@@ -123,17 +125,22 @@ public class ConsumerManager implements Runnable {
         System.err.println("Error subscribing to room." + i + ": " + e.getMessage());
       }
     }
-    while (running.get()) {
-      try {
-        for (DeclareOk queue : queueSet) {
-          
+    try {
+      Channel monitorChannel = pool.borrowChannel();
+      while (running.get()) {
+        for (String queueName : queueSet) {
+          DeclareOk queue = monitorChannel.queueDeclarePassive(queueName);
+          // System.out.println(queue.getQueue() + " has " + queue.getMessageCount() + "messages.");
           if (queue.getMessageCount() > 1000) {
-            if (pool.isEmpty()) {
-              pool.addXChannel(5);
+            // if (pool.isEmpty()) {
+            //   pool.addXChannel(5);
+            // }
+            if(!pool.isEmpty()){
+              System.out.println(queue.getQueue() + " has " + queue.getMessageCount() + "messages.");
+              System.out.println("Adding one more consumer to " + queue.getQueue());
+              subscribe(queue.getQueue());
             }
-            System.out.println(queue.getQueue() + " has " + queue.getMessageCount() + "messages.");
-            System.out.println("Adding one more consumer to " + queue.getQueue());
-            subscribe(queue.getQueue());
+            
           } else if (queue.getMessageCount() < 500
               && consumerAssigment.get(queue.getQueue()).size() > 1) {
             MessageConsumer consumer = consumerAssigment.get(queue.getQueue()).poll();
@@ -143,9 +150,10 @@ public class ConsumerManager implements Runnable {
           }
         }
         Thread.sleep(monitorInterval);
-      } catch (Exception e) {
-        System.err.println("Error in ConsumerManager: " + e.getMessage());
       }
+    pool.returnChannel(monitorChannel);
+    } catch (Exception e) {
+      System.err.println("Error in ConsumerManager: " + e.getMessage());
     }
   }
 }

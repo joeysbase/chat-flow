@@ -13,11 +13,15 @@ import jakarta.websocket.server.ServerContainer;
 
 public class ServerApp {
   public static void main(String[] args) throws Exception {
-    ConsumerManager consumerManager = new ConsumerManager(20, 20, 10, 10000, 5);
+    if(args.length != 1) {
+      System.err.println("Usage: java ServerApp <MQHost>");
+      System.exit(1);
+    }
+    ConsumerManager consumerManager = new ConsumerManager(args[0], 128, 512, 128, 5000, 5);
     Thread consumerManagerThread = new Thread(consumerManager);
     consumerManagerThread.start();
 
-    CacheMonitor cacheMonitor = new CacheMonitor(10000 * 6);
+    CacheMonitor cacheMonitor = new CacheMonitor(1000*10);
     Thread cacheMonitorThread = new Thread(cacheMonitor);
     cacheMonitorThread.start();
 

@@ -14,12 +14,17 @@ public class ProgressMonitor implements Runnable{
         running.set(false);
     }
 
+    public void start(){
+        running.set(true);
+    }
+
     @Override
     public void run() {
         while(running.get()){
             System.out.println("x---------- Progress Monitor Start-----x");
             System.out.println(Float.valueOf(MessagePool.messageQueue.size())/Float.valueOf(MessagePool.totalMessagesGenerated)+"% messages left.");
             System.out.println("x---------- Progress Monitor End-----x");
+            
             try {
                 Thread.sleep(intervalSeconds*1000);
             } catch (InterruptedException e) {
