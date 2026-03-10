@@ -13,11 +13,11 @@ import jakarta.websocket.server.ServerContainer;
 
 public class ServerApp {
   public static void main(String[] args) throws Exception {
-    if(args.length != 1) {
-      System.err.println("Usage: java ServerApp <MQHost>");
+    if(args.length != 4) {
+      System.err.println("Usage: java ServerApp <MQHost> <consumerPoolSize> <messengerPoolSize> <prefetchCount>");
       System.exit(1);
     }
-    ConsumerManager consumerManager = new ConsumerManager(args[0], 128, 512, 128, 5000, 5);
+    ConsumerManager consumerManager = new ConsumerManager(args[0], Integer.parseInt(args[1]), Integer.parseInt(args[2]), Integer.parseInt(args[1]), 5000, Integer.parseInt(args[3]));
     Thread consumerManagerThread = new Thread(consumerManager);
     consumerManagerThread.start();
 
@@ -27,7 +27,7 @@ public class ServerApp {
 
     try {
       Tomcat tomcat = new Tomcat();
-        tomcat.setPort(9090);
+        tomcat.setPort(8080);
         tomcat.getConnector();
         tomcat.setBaseDir(new File("target/tomcat").getAbsolutePath());
 

@@ -6,19 +6,21 @@ import java.util.concurrent.TimeUnit;
 
 public class ClientApp {
     public static void main(String[] args) {
-        ThroughputMonitor monitor = new ThroughputMonitor(1);
-        ProgressMonitor progressMonitor = new ProgressMonitor(1);
-        ExecutorService testPool = Executors.newFixedThreadPool(128);
-        // ExecutorService warmupPool = Executors.newFixedThreadPool(32);
-        ExecutorService monitorPool = Executors.newFixedThreadPool(5);
-        try {
-            if (args.length != 2) {
-                System.err.println("Usage: java ClientApp <send_server_ip> <receive_server_ip>");
+        if (args.length != 3) {
+                System.err.println("Usage: java ClientApp <send_server_ip> <receive_server_ip> <number_of_threads>");
                 System.exit(1);
             }
+        Integer NUMTHREADS=Integer.valueOf(args[2]);
+        ThroughputMonitor monitor = new ThroughputMonitor(1);
+        ProgressMonitor progressMonitor = new ProgressMonitor(1);
+        ExecutorService testPool = Executors.newFixedThreadPool(NUMTHREADS);
+        ExecutorService monitorPool = Executors.newFixedThreadPool(5);
+
+        String sendServerIp = args[0];
+        String receiveServerIp = args[1];
+        ConnectionManager connectionManager = new ConnectionManager(sendServerIp, receiveServerIp);
+        try {
             long totalTime = 0;
-            String sendServerIp = args[0];
-            String receiveServerIp = args[1];
             
             System.out.println("Generating warmup messages...");
             MessagePool.generateMessage(500000);
@@ -26,11 +28,11 @@ public class ClientApp {
             // monitorPool.submit(progressMonitor);
             monitorPool.submit(monitor);
             long warmupStartTime = System.currentTimeMillis();
-            for (int i = 0; i < 128; i++) {
-                testPool.submit(new ClientThread(sendServerIp, receiveServerIp));
+            for (int i = 0; i < NUMTHREADS; i++) {
+                testPool.submit(new ClientThread(connectionManager));
             }
             testPool.shutdown();
-            testPool.awaitTermination(10, TimeUnit.MINUTES);
+            testPool.awaitTermination(60, TimeUnit.MINUTES);
             long warmupEndTime = System.currentTimeMillis();
             totalTime += warmupEndTime - warmupStartTime;
             monitor.stop();
@@ -67,7 +69,7 @@ public class ClientApp {
             // warmupPool.shutdownNow();
             testPool.shutdownNow();
         }finally {
-            ConnectionManager.cleanup();
+            connectionManager.cleanup();
             monitor.stop();
             progressMonitor.stop();
             // warmupPool.shutdownNow();

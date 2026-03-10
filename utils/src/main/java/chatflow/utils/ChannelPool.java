@@ -18,6 +18,9 @@ public class ChannelPool {
   public ChannelPool(String host, int poolSize) {
     this.FACTORY = new ConnectionFactory();
     FACTORY.setHost(host);
+    FACTORY.setUsername("admin");
+    FACTORY.setPassword("password");
+    FACTORY.setPort(5672);
     this.POOL = new LinkedList<>();
     this.poolSize = poolSize;
   }
