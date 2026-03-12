@@ -30,12 +30,8 @@ public class SendEndPoint {
   public static Set<Session> sessionSet = ConcurrentHashMap.newKeySet();
   public static Map<Session, String> sessionToIp = new ConcurrentHashMap<>();
   private static final ObjectMapper MAPPER = new ObjectMapper();
-  // private static final ChannelPool POOL = new ChannelPool("localhost", 20);
   private String serverId="1";
   private static final String EXCHANGE_NAME = "chat.exchange";
-  // {
-  //   POOL.init();
-  // }
 
   public SendEndPoint(String id) {
     serverId = id;

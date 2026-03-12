@@ -25,6 +25,8 @@ public class ServerApp {
         context.addServletContainerInitializer(new WsSci(), Set.of());
         Tomcat.addServlet(context, "default", new org.apache.catalina.servlets.DefaultServlet());
         context.addServletMappingDecoded("/", "default");
+        Tomcat.addServlet(context, "healthServlet", new HealthServlet());
+        context.addServletMappingDecoded("/health", "healthServlet");
 
         tomcat.start();
 

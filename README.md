@@ -20,8 +20,8 @@ Consumer
 ![sequence-diagram](./images/sequence-digram.drawio.svg)
 
 # Client Design
-Connection Sharing between Threads
-- Connection manager maintains 1 send connection and 20 receive connections
+High Throughput Connection Management 
+- Connection manager maintains X send connections and 20*Y receive connections shared across threads
 
 Reliable delivery
 - Wait for ack from the producer and send with retry
@@ -56,6 +56,11 @@ High throughput design
 
 ![consumer-design](./images/consumer-design.drawio.svg)
 
+Current Bottleneck
+- Multiple threads are sharing only one receive connection
+- Consider adding more connection
+
+
 Some edge cases may happen
 - Msg1 was sent earlier than Msg2 but it arrived later at the client than Msg2. 
 - Msg1 and Msg2 were sent to all the client in room 7, but client2 only got Msg2.
@@ -72,23 +77,48 @@ Reliable Publishing
 
 # System Tuning
 I notice that the queue doesn't pile up because the consumer simply send messages to clients without processing. So I make each thread sleep for 100ms after sending messages to stimulate message processing.
-## Single Server
-Client -> 128 & Consumer -> 256 & prefetch -> 1 & Messenger -> 512
-- At first the consumer only deliver 40 msg/s.
-- After queue depth execeed 1000, more consumers are added to keep the queue depth under 1000, which gets 500 msg/s
-![client-throughput](./images/cli128-consu256-pre1-m512/throughput.png)
-![queue-overview](./images/cli128-consu256-pre1-m512/queue-overview.png)
-![queue-detail](./images/cli128-consu256-pre1-m512/queue-detail.png)
-![consumer-scaling](./images/cli128-consu256-pre1-m512/consumer-scaling.png)
-![queue-overview-after](./images/cli128-consu256-pre1-m512/queue-overview-after.png)
+## Single Server Best Throughput
+Configuration
+- 128 client threads and 32 send connections.
+- 64 consumer threads for allocation, 128 messenger threads for allocation, and 10 prefetch count.
 
----
 
-Client -> 128 & Consumer -> 256 & prefetch -> 5 & Messenger -> 512
-- Queue depth remains steady after consumer scaling start to work
-- This configuration keep queue depth to be around 0
-![client-throughput](./images/cli128-consu256-pre5-m512/throughput.png)
-![queue-overview](./images/cli128-consu256-pre5-m512/queue-overview.png)
-![queue-detail](./images/cli128-consu256-pre5-m512/queue-detail.png)
-![consumer-scaling](./images/cli128-consu256-pre5-m512/consumer-scaling.png)
-![queue-overview-after](./images/cli128-consu256-pre5-m512/queue-overview-after.png)
+![client-throughput](./images/single-server-best/throughput.png)
+![queue-overview](./images/single-server-best/queue-overview.png)
+![queue-detail](./images/single-server-best/queue-detail.png)
+
+## Load Balanced
+Two instance configuration
+- 128 client threads and 64 send connections
+- 64 consumer threads for allocation, 128 messenger threads for allocation, and 10 prefetch count.
+
+![client-throughput](./images/load-balanced-2best/throughput.png)
+![queue-overview](./images/load-balanced-2best/queue-overview.png)
+![queue-detail](./images/load-balanced-2best/queue-detail.png)
+
+Four instance configuration
+- 128 clients threads and 24 send connections
+- 64 consumer threads for allocation, 128 messenger threads for allocation, and 10 prefetch count.
+
+![client-throughput](./images/load-balanced-4best/throughput.png)
+![queue-overview](./images/load-balanced-4best/queue-overview.png)
+![queue-detail](./images/load-balanced-4best/queue-detail.png)
+
+
+Load distribution
+![load-distribution](./images/load-distribution.png)
+
+## Analysis
+- Single server without load balancer achieved the best throughput
+- Single server with load balancer achieved only 762 msg/s throughput
+- Adding one more process can significantly improved throughput to around 2000 msg/s
+- The bottleneck could be network round-trip and single process limitation
+
+## Possible Optimization
+- Multiple rooms can share one receive connection to reduce consumer overhead.
+- Seperate client into send client and receive client.
+
+## AWS and Queue Configuration
+![queue](./images/config/queue.png)
+![ALB](./images/config/ALB-Rule.png)
+![Target-group](./images/config/target-group.png)

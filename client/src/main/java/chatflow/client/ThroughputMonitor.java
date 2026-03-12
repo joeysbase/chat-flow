@@ -24,6 +24,7 @@ public class ThroughputMonitor implements Runnable{
         this.startTime = System.currentTimeMillis();
         while(running.get()){
             int succeed=Statistics.succeedMessage.get();
+            int acked=Statistics.ackedMessage.get();
             int failed=Statistics.failedMessage.get();
             int sendConn=Statistics.sendConnection.get();
             int sendReconn=Statistics.sendReconnection.get();
@@ -32,7 +33,7 @@ public class ThroughputMonitor implements Runnable{
             long currentTime=System.currentTimeMillis();
             long timeElapsed=(currentTime-startTime)/1000;
             System.out.println("\nx---------- Throughput Monitor Start-----x");
-            System.out.println("Throughput in last "+intervalSeconds+" seconds: Throughput -> "+(float)succeed/(float)timeElapsed+" msg/s");
+            System.out.println("Throughput in last "+intervalSeconds+" seconds: Throughput -> "+(float)succeed/(float)timeElapsed+" msg/s. Acked -> "+(float)acked/(float)timeElapsed+" msg/s");
             System.out.println("Statistics in last "+intervalSeconds+" seconds: succeed="+succeed+", failed="+failed+", sendConn="+sendConn+", sendReconn="+sendReconn+", recvConn="+recvConn+", recvReconn="+recvReconn);
             System.out.println("x---------- Throughput Monitor End-----x\n");
             // System.out.println(ConnectionManager.receiveConnections.keySet());

@@ -6,11 +6,12 @@ import java.util.concurrent.TimeUnit;
 
 public class ClientApp {
     public static void main(String[] args) {
-        if (args.length != 3) {
-                System.err.println("Usage: java ClientApp <send_server_ip> <receive_server_ip> <number_of_threads>");
+        if (args.length != 4) {
+                System.err.println("Usage: java ClientApp <send_server_ip> <receive_server_ip> <number_of_threads> <number_of_send_connection>");
                 System.exit(1);
             }
         Integer NUMTHREADS=Integer.valueOf(args[2]);
+        Integer NUMSENDCONN=Integer.valueOf(args[3]);
         ThroughputMonitor monitor = new ThroughputMonitor(1);
         ProgressMonitor progressMonitor = new ProgressMonitor(1);
         ExecutorService testPool = Executors.newFixedThreadPool(NUMTHREADS);
@@ -18,7 +19,8 @@ public class ClientApp {
 
         String sendServerIp = args[0];
         String receiveServerIp = args[1];
-        ConnectionManager connectionManager = new ConnectionManager(sendServerIp, receiveServerIp);
+        ConnectionManager connectionManager = new ConnectionManager(sendServerIp, receiveServerIp, NUMSENDCONN);
+        connectionManager.init();
         try {
             long totalTime = 0;
             

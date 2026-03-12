@@ -8,14 +8,9 @@ import jakarta.websocket.Session;
 public class RoomManager {
   private static final ConcurrentHashMap<String, Set<Session>> roomSessions =
       new ConcurrentHashMap<>();
-  
 
   public static void addSessionToRoom(String roomId, Session session) {
     roomSessions.computeIfAbsent(roomId, k -> ConcurrentHashMap.newKeySet()).add(session);
-    try {
-      // monitor.notifyNewUserJoin();
-    } catch (Exception e) {
-    }
   }
 
   public static void removeSessionFromRoom(String roomId, Session session) {
@@ -39,7 +34,4 @@ public class RoomManager {
   public static boolean isEmpty() {
     return roomSessions.isEmpty();
   }
-
-
-  
 }

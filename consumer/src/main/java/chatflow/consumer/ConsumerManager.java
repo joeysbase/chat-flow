@@ -29,6 +29,7 @@ public class ConsumerManager implements Runnable {
   private final long monitorInterval;
   private final Set<String> queueSet = new HashSet<>();
   private final int prefetchCount;
+  
 
   // private final int messengerPoolSize;
 
@@ -77,8 +78,6 @@ public class ConsumerManager implements Runnable {
       workerPool.submit(
           () -> {
             try {
-              // System.out.println("Received message for routing key: " +
-              // envelope.getRoutingKey());
               boolean succeed =
                   broadcaster.send(
                       new String(body, StandardCharsets.UTF_8), envelope.getRoutingKey());
@@ -115,7 +114,6 @@ public class ConsumerManager implements Runnable {
   @Override
   public void run() {
     for (int i = 1; i < 21; i++) {
-      // System.out.println("Subscribing to room." + i);
       try {
         if (pool.isEmpty()) {
           pool.addXChannel(5);

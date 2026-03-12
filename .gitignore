@@ -12,3 +12,5 @@ target
 tomcat*
 
 cs6650-lab1-key.pem
+
+setup-ec2.sh

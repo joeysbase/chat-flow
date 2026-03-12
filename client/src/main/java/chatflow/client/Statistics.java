@@ -13,4 +13,5 @@ public class Statistics {
     public static final AtomicInteger failedMessage=new AtomicInteger(0);
     public static final Queue<Long> succeedMessageRoundtripTime=new ConcurrentLinkedQueue<>();
     public static final Queue<Long> throughputoverTime=new ConcurrentLinkedQueue<>();
+    public static final AtomicInteger ackedMessage=new AtomicInteger();
 }

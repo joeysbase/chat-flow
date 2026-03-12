@@ -1,27 +1,32 @@
 package chatflow.consumer;
 
-import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import jakarta.websocket.Session;
 
 public class Broadcaster {
   private final ExecutorService messengerPool;
+  private final ObjectMapper mapper = new ObjectMapper();
 
   private class Messenger implements Runnable {
 
     private final String message;
     private final Session session;
-    private final CountDownLatch latch;
+    private final String messageId;
 
-    public Messenger(String message, Session session, CountDownLatch latch) {
+    public Messenger(String message, Session session, String messageId) {
       this.message = message;
       this.session = session;
-      this.latch = latch;
+      this.messageId = messageId;
     }
 
     private void backoff(int attempt) {
@@ -34,43 +39,39 @@ public class Broadcaster {
 
     private boolean sendWithRetry(String message, int maxRetries, Session session) {
       int attempt = 0;
+      CountDownLatch latch = new CountDownLatch(1);
       while (attempt < maxRetries) {
         try {
           if (session.isOpen()) {
-            // System.out.println("Sending message to session " + session.getId() + ": ");
-            session.getBasicRemote().sendText(message);
-            Thread.sleep(100);
+            AckManager.addSessionLatch(messageId, session, latch);
+            // Thread.sleep(500);
+            session.getAsyncRemote().sendText(message);
           } else {
             System.out.println("Connection not open");
+            return true; // Consider closed connection as successful delivery for retry logic
           }
-          return true;
-        } catch (IOException e) {
+          boolean succeed= latch.await(10, TimeUnit.SECONDS);
+          if(succeed){
+            AckManager.removeSessionLatch(messageId, session);
+            return true;
+          }
+          
           attempt++;
-          if (attempt >= maxRetries) {
-            // Do nothing for now
-          }
           backoff(attempt);
         } catch (InterruptedException e) {
-
+          attempt++;
+          backoff(attempt);
         }
       }
       return false;
     }
 
-    // public void send(){
-    //   boolean succeed = sendWithRetry(message, 5, session);
-    //   if (succeed) {
-    //     IdempotencyCache.add(message, session);
-    //   }
-    // }
-
     @Override
     public void run() {
       boolean succeed = sendWithRetry(message, 5, session);
       if (succeed) {
-        IdempotencyCache.add(message, session);
+        IdempotencyCache.add(messageId, session);
       }
-      this.latch.countDown();
     }
   }
 
@@ -78,35 +79,29 @@ public class Broadcaster {
     messengerPool = Executors.newFixedThreadPool(messengerPoolSize);
   }
 
-  private boolean isAllSent(String message, Set<Session> sessionSet) {
-    for (Session session : sessionSet) {
-      if (!IdempotencyCache.isMessageSent(message, session)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
   public boolean send(String message, String routingKey) {
     String roomId = routingKey.substring(routingKey.lastIndexOf(".") + 1);
-    // System.out.println("Broadcasting message to room: " + roomId);
-    Set<Session> sessionSet = RoomManager.getSessionsByRoomId(roomId);
-    if (!sessionSet.isEmpty()) {
-      CountDownLatch latch = new CountDownLatch(sessionSet.size());
-      for (Session session : sessionSet) {
-        if (!IdempotencyCache.isMessageSent(message, session)) {
-          // Messenger m=new Messenger(message, session, latch);
-          // m.send();
-          messengerPool.submit(new Messenger(message, session, latch));
+    Set<Session> sessions = RoomManager.getSessionsByRoomId(roomId);
+    try {
+      Map<String, Object> msgMap = mapper.readValue(message, HashMap.class);
+      String messageId = (String) msgMap.get("messageId");
+      if (sessions!=null&&!sessions.isEmpty()) {
+        CountDownLatch latch = new CountDownLatch(sessions.size());
+        AckManager.addLatch(messageId, latch);
+        for (Session session : sessions) {
+          if (!IdempotencyCache.isMessageSent(messageId, session)) {
+            messengerPool.submit(new Messenger(message, session, messageId));
+          } else {
+            latch.countDown();
+          }
         }
+        boolean succeed = latch.await(1, TimeUnit.MINUTES);
+        AckManager.removeLatch(messageId);
+        return succeed;
       }
+    } catch (JsonProcessingException | InterruptedException e) {
 
-      try {
-        latch.await(1, TimeUnit.MINUTES);
-      } catch (InterruptedException e) {
-        // Handle interruption if necessary
-      }
     }
-    return isAllSent(message, sessionSet);
+    return false;
   }
 }
